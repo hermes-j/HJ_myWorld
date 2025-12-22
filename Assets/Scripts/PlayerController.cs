@@ -5,10 +5,9 @@ using UnityEngine.Tilemaps;
 public class PlayerController : MonoBehaviour
 {
     [Header("Map Settings")]
-    // 1. 갈 수 있는 땅 목록 (Ground, Hill_Ground 등)
+    // 갈 수 있는 땅 목록 (Ground, Hill_Ground 등)
     public Tilemap[] walkableTilemaps; 
-    
-    // 2. [추가됨] 절대 못 가는 장애물 목록 (Obstacles, Walls, CliffEdges 등)
+    // 절대 못 가는 장애물 목록 (Obstacles, Walls, CliffEdges 등)
     public Tilemap[] obstacleTilemaps; 
 
     [Header("Movement Settings")]
@@ -26,6 +25,7 @@ public class PlayerController : MonoBehaviour
     
     private bool isDashing = false;
     private bool canDash = true;
+    private float collisionOffset = 0.4f; // 벽 충돌 검사 시 미리 찔러보는 오프셋
 
     void Start()
     {
@@ -56,8 +56,13 @@ public class PlayerController : MonoBehaviour
         Vector2 dist = movement * currentSpeed * Time.fixedDeltaTime;
         Vector2 targetPos = rb.position;
 
-        // X축 이동 검사
-        Vector3 futurePosX = new Vector3(targetPos.x + dist.x, targetPos.y, 0);
+        // 이동하려는 방향의 벡터 (양수/음수 판별용)
+        Vector2 dir = movement.normalized;
+
+        // X축 검사 시 이동 방향으로 0.4만큼 더 가서 벽이 있는지 찔러봄
+        Vector3 futurePosX = new Vector3(targetPos.x + dist.x + (dir.x * collisionOffset), targetPos.y, 0);
+        
+        // 이동 승인되면 실제 이동은 dist만큼만 함 (오프셋은 검사만 하는 용도)
         if (CanMoveTo(futurePosX)) 
         {
             targetPos.x += dist.x;
@@ -73,33 +78,32 @@ public class PlayerController : MonoBehaviour
         rb.MovePosition(targetPos);
     }
 
-    // [핵심 로직 변경] 이동 가능 여부 판단
+    // 이동 가능 여부 판단
     bool CanMoveTo(Vector3 worldPos)
     {
-        // 1. 먼저 '장애물(Obstacle)' 타일이 있는지 검사합니다.
-        // 장애물이 있다면, 밑에 땅이 있든 말든 무조건 이동 불가(false)입니다.
+        // 장애물이 있다면 밑에 땅이 있든 말든 무조건 이동 불가
         if (obstacleTilemaps != null)
         {
             foreach (Tilemap map in obstacleTilemaps)
             {
                 if (map == null) continue;
                 Vector3Int cellPos = map.WorldToCell(worldPos);
-                if (map.HasTile(cellPos)) return false; // 장애물 발견! 즉시 차단
+                if (map.HasTile(cellPos)) return false;
             }
         }
 
-        // 2. 장애물이 없다면, 밟을 수 있는 '땅(Walkable)'이 있는지 검사합니다.
+        // 장애물이 없다면, 밟을 수 있는 땅이 있는지 검사
         if (walkableTilemaps != null)
         {
             foreach (Tilemap map in walkableTilemaps)
             {
                 if (map == null) continue;
                 Vector3Int cellPos = map.WorldToCell(worldPos);
-                if (map.HasTile(cellPos)) return true; // 땅 발견! 이동 허용
+                if (map.HasTile(cellPos)) return true;
             }
         }
 
-        // 3. 땅도 없고 장애물도 없는 허공이라면 이동 불가
+        // 땅도 없고 장애물도 없는 허공이라면 이동 불가
         return false;
     }
 
