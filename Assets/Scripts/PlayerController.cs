@@ -1,23 +1,31 @@
 using System.Collections;
 using UnityEngine;
+using UnityEngine.Tilemaps;
 
 public class PlayerController : MonoBehaviour
 {
+    [Header("Map Settings")]
+    // 1. 갈 수 있는 땅 목록 (Ground, Hill_Ground 등)
+    public Tilemap[] walkableTilemaps; 
+    
+    // 2. [추가됨] 절대 못 가는 장애물 목록 (Obstacles, Walls, CliffEdges 등)
+    public Tilemap[] obstacleTilemaps; 
+
     [Header("Movement Settings")]
-    public float walkSpeed = 5f;  // 걷는 속도
-    public float runSpeed = 8f;   // 달리는 속도
+    public float walkSpeed = 5f;
+    public float runSpeed = 8f;
     
     [Header("Dash Settings")]
-    public float dashSpeed = 20f;     // 대쉬 순간 속도
-    public float dashDuration = 0.2f; // 대쉬가 지속되는 시간 (짧게)
-    public float dashCooldown = 1f;   // 대쉬 쿨타임 (연타 방지)
+    public float dashSpeed = 20f;
+    public float dashDuration = 0.2f;
+    public float dashCooldown = 1f;
 
     private Rigidbody2D rb;
     private Vector2 movement;
-    private float activeMoveSpeed;    // 현재 적용 중인 속도
+    private float activeMoveSpeed;
     
-    private bool isDashing = false;   // 대쉬 중인가?
-    private bool canDash = true;      // 대쉬 가능한가? (쿨타임 체크)
+    private bool isDashing = false;
+    private bool canDash = true;
 
     void Start()
     {
@@ -27,27 +35,15 @@ public class PlayerController : MonoBehaviour
 
     void Update()
     {
-        // 1. 대쉬 중일 때는 방향 전환을 막아 조작감을 높임 (선택 사항)
         if (isDashing) return;
 
-        // 2. 방향 입력 (WASD)
         movement.x = Input.GetAxisRaw("Horizontal");
         movement.y = Input.GetAxisRaw("Vertical");
-
-        // 대각선 이동 시 속도가 빨라지는 것을 방지 (정규화)
         movement = movement.normalized;
 
-        // 3. 달리기 처리 (Left Shift 누르고 있으면 달리기)
-        if (Input.GetKey(KeyCode.LeftShift))
-        {
-            activeMoveSpeed = runSpeed;
-        }
-        else
-        {
-            activeMoveSpeed = walkSpeed;
-        }
+        if (Input.GetKey(KeyCode.LeftShift)) activeMoveSpeed = runSpeed;
+        else activeMoveSpeed = walkSpeed;
 
-        // 4. 대쉬 처리 (Space 바, 이동 중일 때만 가능)
         if (Input.GetKeyDown(KeyCode.Space) && canDash && movement != Vector2.zero)
         {
             StartCoroutine(DashRoutine());
@@ -56,29 +52,64 @@ public class PlayerController : MonoBehaviour
 
     void FixedUpdate()
     {
-        // 대쉬 중일 때는 대쉬 속도로, 아닐 때는 걷기/달리기 속도로 이동
-        if (isDashing)
+        float currentSpeed = isDashing ? dashSpeed : activeMoveSpeed;
+        Vector2 dist = movement * currentSpeed * Time.fixedDeltaTime;
+        Vector2 targetPos = rb.position;
+
+        // X축 이동 검사
+        Vector3 futurePosX = new Vector3(targetPos.x + dist.x, targetPos.y, 0);
+        if (CanMoveTo(futurePosX)) 
         {
-            rb.MovePosition(rb.position + movement * dashSpeed * Time.fixedDeltaTime);
+            targetPos.x += dist.x;
         }
-        else
+
+        // Y축 이동 검사
+        Vector3 futurePosY = new Vector3(targetPos.x, targetPos.y + dist.y, 0);
+        if (CanMoveTo(futurePosY))
         {
-            rb.MovePosition(rb.position + movement * activeMoveSpeed * Time.fixedDeltaTime);
+            targetPos.y += dist.y;
         }
+
+        rb.MovePosition(targetPos);
     }
 
-    // 대쉬의 시간과 쿨타임을 관리하는 코루틴 (일종의 타이머)
+    // [핵심 로직 변경] 이동 가능 여부 판단
+    bool CanMoveTo(Vector3 worldPos)
+    {
+        // 1. 먼저 '장애물(Obstacle)' 타일이 있는지 검사합니다.
+        // 장애물이 있다면, 밑에 땅이 있든 말든 무조건 이동 불가(false)입니다.
+        if (obstacleTilemaps != null)
+        {
+            foreach (Tilemap map in obstacleTilemaps)
+            {
+                if (map == null) continue;
+                Vector3Int cellPos = map.WorldToCell(worldPos);
+                if (map.HasTile(cellPos)) return false; // 장애물 발견! 즉시 차단
+            }
+        }
+
+        // 2. 장애물이 없다면, 밟을 수 있는 '땅(Walkable)'이 있는지 검사합니다.
+        if (walkableTilemaps != null)
+        {
+            foreach (Tilemap map in walkableTilemaps)
+            {
+                if (map == null) continue;
+                Vector3Int cellPos = map.WorldToCell(worldPos);
+                if (map.HasTile(cellPos)) return true; // 땅 발견! 이동 허용
+            }
+        }
+
+        // 3. 땅도 없고 장애물도 없는 허공이라면 이동 불가
+        return false;
+    }
+
     private IEnumerator DashRoutine()
     {
         isDashing = true;
-        canDash = false; // 쿨타임 시작
-
-        yield return new WaitForSeconds(dashDuration); // 0.2초 동안 대쉬 상태 유지
-
-        isDashing = false; // 대쉬 끝
-
-        yield return new WaitForSeconds(dashCooldown); // 쿨타임 대기
-
-        canDash = true; // 다시 대쉬 가능
+        canDash = false;
+        yield return new WaitForSeconds(dashDuration);
+        isDashing = false;
+        yield return new WaitForSeconds(dashCooldown);
+        canDash = true;
     }
 }
