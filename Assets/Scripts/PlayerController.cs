@@ -15,14 +15,15 @@ public class PlayerController : MonoBehaviour
     private Rigidbody2D rb;
     private Vector2 movement;
     private float activeMoveSpeed;
-    
+    private Animator animator;
     private bool isDashing = false;
     private bool canDash = true;
 
     void Start()
     {
         rb = GetComponent<Rigidbody2D>();
-        activeMoveSpeed = walkSpeed;
+        animator = GetComponent<Animator>();
+        activeMoveSpeed = walkSpeed;    
     }
 
     void Update()
@@ -44,6 +45,8 @@ public class PlayerController : MonoBehaviour
         {
             StartCoroutine(DashRoutine());
         }
+
+        UpdateAnimation();
     }
 
     void FixedUpdate()
@@ -56,6 +59,22 @@ public class PlayerController : MonoBehaviour
         
         // Rigidbody를 통해 이동 (물리 엔진이 충돌을 자동 계산함)
         rb.MovePosition(rb.position + dist);
+    }
+
+    void UpdateAnimation()
+    {
+        if (movement != Vector2.zero)
+        {
+            // 이동 중일 때: 입력값을 애니메이터에 전달하여 해당 방향 걷기 모션 재생
+            animator.SetFloat("Horizontal", movement.x);
+            animator.SetFloat("Vertical", movement.y);
+            animator.SetFloat("Speed", movement.sqrMagnitude); // 움직임 강도 전달
+        }
+        else
+        {
+            // 멈췄을 때: Speed를 0으로 만듦
+            animator.SetFloat("Speed", 0);
+        }
     }
 
     private IEnumerator DashRoutine()
