@@ -4,81 +4,86 @@ using UnityEngine;
 public class PlayerController : MonoBehaviour
 {
     [Header("Movement Settings")]
-    public float walkSpeed = 5f;  // 걷는 속도
-    public float runSpeed = 8f;   // 달리는 속도
+    public float walkSpeed = 5f;
+    public float runSpeed = 8f;
     
     [Header("Dash Settings")]
-    public float dashSpeed = 20f;     // 대쉬 순간 속도
-    public float dashDuration = 0.2f; // 대쉬가 지속되는 시간 (짧게)
-    public float dashCooldown = 1f;   // 대쉬 쿨타임 (연타 방지)
+    public float dashSpeed = 20f;
+    public float dashDuration = 0.2f;
+    public float dashCooldown = 1f;
 
     private Rigidbody2D rb;
     private Vector2 movement;
-    private float activeMoveSpeed;    // 현재 적용 중인 속도
-    
-    private bool isDashing = false;   // 대쉬 중인가?
-    private bool canDash = true;      // 대쉬 가능한가? (쿨타임 체크)
+    private float activeMoveSpeed;
+    private Animator animator;
+    private bool isDashing = false;
+    private bool canDash = true;
 
     void Start()
     {
         rb = GetComponent<Rigidbody2D>();
-        activeMoveSpeed = walkSpeed;
+        animator = GetComponent<Animator>();
+        activeMoveSpeed = walkSpeed;    
     }
 
     void Update()
     {
-        // 1. 대쉬 중일 때는 방향 전환을 막아 조작감을 높임 (선택 사항)
+        // 1. 대쉬 중일 때는 방향 전환 막기
         if (isDashing) return;
 
-        // 2. 방향 입력 (WASD)
+        // 2. 입력 받기
         movement.x = Input.GetAxisRaw("Horizontal");
         movement.y = Input.GetAxisRaw("Vertical");
-
-        // 대각선 이동 시 속도가 빨라지는 것을 방지 (정규화)
         movement = movement.normalized;
 
-        // 3. 달리기 처리 (Left Shift 누르고 있으면 달리기)
-        if (Input.GetKey(KeyCode.LeftShift))
-        {
-            activeMoveSpeed = runSpeed;
-        }
-        else
-        {
-            activeMoveSpeed = walkSpeed;
-        }
+        // 3. 달리기 상태 체크
+        if (Input.GetKey(KeyCode.LeftShift)) activeMoveSpeed = runSpeed;
+        else activeMoveSpeed = walkSpeed;
 
-        // 4. 대쉬 처리 (Space 바, 이동 중일 때만 가능)
+        // 4. 대쉬 입력
         if (Input.GetKeyDown(KeyCode.Space) && canDash && movement != Vector2.zero)
         {
             StartCoroutine(DashRoutine());
         }
+
+        UpdateAnimation();
     }
 
     void FixedUpdate()
     {
-        // 대쉬 중일 때는 대쉬 속도로, 아닐 때는 걷기/달리기 속도로 이동
-        if (isDashing)
+        // 물리 이동은 FixedUpdate에서 처리
+        float currentSpeed = isDashing ? dashSpeed : activeMoveSpeed;
+        
+        // 이동할 거리 계산
+        Vector2 dist = movement * currentSpeed * Time.fixedDeltaTime;
+        
+        // Rigidbody를 통해 이동 (물리 엔진이 충돌을 자동 계산함)
+        rb.MovePosition(rb.position + dist);
+    }
+
+    void UpdateAnimation()
+    {
+        if (movement != Vector2.zero)
         {
-            rb.MovePosition(rb.position + movement * dashSpeed * Time.fixedDeltaTime);
+            // 이동 중일 때: 입력값을 애니메이터에 전달하여 해당 방향 걷기 모션 재생
+            animator.SetFloat("Horizontal", movement.x);
+            animator.SetFloat("Vertical", movement.y);
+            animator.SetFloat("Speed", movement.sqrMagnitude); // 움직임 강도 전달
         }
         else
         {
-            rb.MovePosition(rb.position + movement * activeMoveSpeed * Time.fixedDeltaTime);
+            // 멈췄을 때: Speed를 0으로 만듦
+            animator.SetFloat("Speed", 0);
         }
     }
 
-    // 대쉬의 시간과 쿨타임을 관리하는 코루틴 (일종의 타이머)
     private IEnumerator DashRoutine()
     {
         isDashing = true;
-        canDash = false; // 쿨타임 시작
-
-        yield return new WaitForSeconds(dashDuration); // 0.2초 동안 대쉬 상태 유지
-
-        isDashing = false; // 대쉬 끝
-
-        yield return new WaitForSeconds(dashCooldown); // 쿨타임 대기
-
-        canDash = true; // 다시 대쉬 가능
+        canDash = false;
+        yield return new WaitForSeconds(dashDuration);
+        isDashing = false;
+        yield return new WaitForSeconds(dashCooldown);
+        canDash = true;
     }
 }
